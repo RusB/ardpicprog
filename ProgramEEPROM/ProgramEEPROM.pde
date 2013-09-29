@@ -26,6 +26,8 @@
 
 #define MCLR_RESET      HIGH    // PIN_MCLR state to reset the PIC
 #define MCLR_VPP        LOW     // PIN_MCLR state to apply 13v to MCLR/VPP pin
+#define VDD_OFF         LOW     // PIN_VDD state to lower target VDD
+#define VDD_ON          HIGH    // PIN_VDD state to raise target VDD
 
 // All delays are in microseconds.
 #define DELAY_SETTLE    50      // Delay for lines to settle for power off/on
@@ -148,7 +150,7 @@ void setup()
     pinMode(PIN_MCLR, OUTPUT);
     pinMode(PIN_VDD, OUTPUT);
     digitalWrite(PIN_MCLR, MCLR_RESET);
-    digitalWrite(PIN_VDD, LOW);
+    digitalWrite(PIN_VDD, VDD_OFF);
 
     // Initially set the CLOCK and DATA lines to be outputs in the high state.
     pinMode(PIN_CLOCK, OUTPUT);
@@ -847,7 +849,7 @@ void enterProgramMode()
         return;
 
     // Lower VDD, which will power off the chip just in case.
-    digitalWrite(PIN_VDD, LOW);
+    digitalWrite(PIN_VDD, VDD_OFF);
 
     // Make sure that CLOCK and DATA are high.
     pinMode(PIN_CLOCK, OUTPUT);
@@ -859,7 +861,7 @@ void enterProgramMode()
     delayMicroseconds(DELAY_SETTLE);
 
     // Raise VDD.
-    digitalWrite(PIN_VDD, HIGH);
+    digitalWrite(PIN_VDD, VDD_ON);
     delayMicroseconds(DELAY_SETTLE);
 
     // Now in program mode, address not set yet.
@@ -874,7 +876,7 @@ void exitProgramMode()
         return;
 
     // Lower VDD.
-    digitalWrite(PIN_VDD, LOW);
+    digitalWrite(PIN_VDD, VDD_OFF);
 
     // Return the CLOCK and DATA lines to the pulled-high state.
     pinMode(PIN_CLOCK, OUTPUT);
