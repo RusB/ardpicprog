@@ -30,6 +30,12 @@
 #define VDD_OFF         LOW     // PIN_VDD state to lower target VDD
 #define VDD_ON          HIGH    // PIN_VDD state to raise target VDD
 
+// The default is true, but false is reportedly necessary for some devices, and
+// for some other devices if the CP bit is enabled. Meanwhile, a device with an
+// enabled internal oscillator may be trickier to program Vdd-first. If one
+// doesn't work, why not try the other?
+#define VPP_BEFORE_VDD  true
+
 // All delays are in microseconds.
 #define DELAY_SETTLE    50      // Delay for lines to settle for reset
 #define DELAY_TPPDP     5       // Hold time after raising MCLR
@@ -1094,12 +1100,21 @@ void enterProgramMode()
     pinMode(PIN_DATA, OUTPUT);
     pinMode(PIN_CLOCK, OUTPUT);
 
-    // Raise MCLR, then VDD.
-    digitalWrite(PIN_MCLR, MCLR_VPP);
-    delayMicroseconds(DELAY_TPPDP);
-    digitalWrite(PIN_VDD, VDD_ON);
-    delayMicroseconds(DELAY_THLD0);
-
+    if (VPP_BEFORE_VDD) {
+      // Raise MCLR, then VDD.
+      digitalWrite(PIN_MCLR, MCLR_VPP);
+      delayMicroseconds(DELAY_TPPDP);
+      digitalWrite(PIN_VDD, VDD_ON);
+      delayMicroseconds(DELAY_THLD0);
+    }
+    else {
+      // Raise VDD, then MCLR.
+      digitalWrite(PIN_VDD, VDD_ON);
+      delayMicroseconds(DELAY_THLD0);
+      digitalWrite(PIN_MCLR, MCLR_VPP);
+      delayMicroseconds(DELAY_TPPDP);
+    }
+    
     // Now in program mode, starting at the first word of program memory.
     state = STATE_PROGRAM;
     pc = 0;
