@@ -192,6 +192,25 @@ struct deviceInfo const devices[] PROGMEM = {
     {0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 };
 
+inline int valueOfHexDigit(char ch)
+{
+    if(ch >= '0' && ch <= '9') {
+        return ch - '0';
+    } else if(ch >= 'A' && ch <= 'F') {
+        return ch - 'A' + 10;
+    } else if(ch >= 'a' && ch <= 'f') {
+        return ch - 'a' + 10;
+    } else {
+        return -1;
+    }
+}
+
+inline char getLowHexDigit(unsigned int value)
+{
+    byte low = (byte)(value & 0x0F);
+    return (char)( (low >= 10) ? ('A' + low - 10) : ('0' + low) );
+}
+
 // Buffer for command-line character input and READBIN data packets.
 #define BINARY_TRANSFER_MAX 64
 #define BUFFER_MAX (BINARY_TRANSFER_MAX + 1)
@@ -240,10 +259,7 @@ void loop()
                 --buflen;
         } else if (buflen < (BUFFER_MAX - 1)) {
             // Add the character to the buffer after forcing to upper case.
-            if (ch >= 'a' && ch <= 'z')
-                buffer[buflen++] = ch - 'a' + 'A';
-            else
-                buffer[buflen++] = ch;
+            buffer[buflen++] = toupper(ch);
         }
         lastActive = millis();
     } else if (state != STATE_IDLE) {
@@ -258,18 +274,15 @@ void loop()
 
 void printHex1(unsigned int value)
 {
-    if (value >= 10)
-        Serial.print((char)('A' + value - 10));
-    else
-        Serial.print((char)('0' + value));
+    Serial.print(getLowHexDigit(value));
 }
 
 void printHex4(unsigned int word)
 {
-    printHex1((word >> 12) & 0x0F);
-    printHex1((word >> 8) & 0x0F);
-    printHex1((word >> 4) & 0x0F);
-    printHex1(word & 0x0F);
+    printHex1(word >> 12);
+    printHex1(word >> 8);
+    printHex1(word >> 4);
+    printHex1(word);
 }
 
 void printHex8(unsigned long word)
@@ -495,16 +508,15 @@ int parseHex(const char *args, unsigned long *value)
     *value = 0;
     for (;;) {
         char ch = *args;
-        if (ch >= '0' && ch <= '9')
-            *value = (*value << 4) | (ch - '0');
-        else if (ch >= 'A' && ch <= 'F')
-            *value = (*value << 4) | (ch - 'A' + 10);
-        else if (ch >= 'a' && ch <= 'f')
-            *value = (*value << 4) | (ch - 'a' + 10);
-        else
+        int digitValue = valueOfHexDigit(ch);
+        if(digitValue < 0) {
             break;
-        ++size;
-        ++args;
+        }
+        else {
+            *value = (*value << 4) | digitValue;
+            ++size;
+            ++args;
+        }
     }
     if (*args != '\0' && *args != '-' && *args != ' ' && *args != '\t')
         return 0;
@@ -1041,11 +1053,8 @@ bool matchString(const prog_char *name, const char *str, int len)
             return len == 0;
         else if (len == 0)
             break;
-        if (ch1 >= 'a' && ch1 <= 'z')
-            ch1 = ch1 - 'a' + 'A';
-        char ch2 = *str;
-        if (ch2 >= 'a' && ch2 <= 'z')
-            ch2 = ch2 - 'a' + 'A';
+        ch1 = toupper(ch1);
+        char ch2 = toupper(*str);
         if (ch1 != ch2)
             break;
         ++name;
