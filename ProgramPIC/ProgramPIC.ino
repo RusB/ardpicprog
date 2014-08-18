@@ -117,6 +117,35 @@ unsigned int  configSave    = DEFAULT_CONFIG_SAVE;
 byte progFlashType          = DEFAULT_PROG_FLASH_TYPE;
 byte dataFlashType          = DEFAULT_DATA_FLASH_TYPE;
 
+struct deviceInfo
+{
+    PROGSTR name;                  // User-readable name of the device.
+    int16_t PROGMEM deviceId;      // Device ID for the PIC (-1 if no id).
+    uint32_t PROGMEM programSize;  // Size of program memory (words).
+    uint32_t PROGMEM configStart;  // Flat address start of configuration memory.
+    uint32_t PROGMEM dataStart;    // Flat address start of EEPROM data memory.
+    uint16_t PROGMEM configSize;   // Number of configuration words.
+    uint16_t PROGMEM dataSize;     // Size of EEPROM data memory (bytes).
+    uint16_t PROGMEM reservedWords;// Reserved program words (e.g. for OSCCAL).
+    uint16_t PROGMEM configSave;   // Bits in config word to be saved.
+    uint8_t PROGMEM progFlashType; // Type of flash for program memory.
+    uint8_t PROGMEM dataFlashType; // Type of flash for data memory.
+};
+
+inline void setGlobalParametersFromDevice(const struct deviceInfo *dev) {
+    // Update the global device details.
+    programEnd = PM32(dev->programSize) - 1;
+    configStart = PM32(dev->configStart);
+    configEnd = configStart + PM16(dev->configSize) - 1;
+    dataStart = PM32(dev->dataStart);
+    dataEnd = dataStart + PM16(dev->dataSize) - 1;
+    reservedStart = programEnd - PM16(dev->reservedWords) + 1;
+    reservedEnd = programEnd;
+    configSave = PM16(dev->configSave);
+    progFlashType = PM8(dev->progFlashType);
+    dataFlashType = PM8(dev->dataFlashType);
+}
+
 inline void resetGlobalParameters() {
     programEnd    = DEFAULT_PROGRAM_END;
     configStart   = DEFAULT_CONFIG_START;
@@ -154,21 +183,6 @@ PROGCHR s_pic16f887[]  = "pic16f887";
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
 // been tested by the author.  Patches welcome to improve the list.
-struct deviceInfo
-{
-    PROGSTR name;                  // User-readable name of the device.
-    int16_t PROGMEM deviceId;      // Device ID for the PIC (-1 if no id).
-    uint32_t PROGMEM programSize;  // Size of program memory (words).
-    uint32_t PROGMEM configStart;  // Flat address start of configuration memory.
-    uint32_t PROGMEM dataStart;    // Flat address start of EEPROM data memory.
-    uint16_t PROGMEM configSize;   // Number of configuration words.
-    uint16_t PROGMEM dataSize;     // Size of EEPROM data memory (bytes).
-    uint16_t PROGMEM reservedWords;// Reserved program words (e.g. for OSCCAL).
-    uint16_t PROGMEM configSave;   // Bits in config word to be saved.
-    uint8_t PROGMEM progFlashType; // Type of flash for program memory.
-    uint8_t PROGMEM dataFlashType; // Type of flash for data memory.
-
-};
 struct deviceInfo const PROGMEM devices[] = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
     {s_pic12f629,  0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
@@ -282,25 +296,32 @@ void loop()
     }
 }
 
-void printHex1(unsigned int value)
+void printHex4(uint16_t value)
 {
-    Serial.print(getLowHexDigit(value));
+    char buffer[5];
+  
+    buffer[0] = getLowHexDigit(value >> 12);
+    buffer[1] = getLowHexDigit(value >> 8);
+    buffer[2] = getLowHexDigit(value >> 4);
+    buffer[3] = getLowHexDigit(value);
+    buffer[4] = '\0';
+
+    Serial.print(buffer);
 }
 
-void printHex4(unsigned int word)
+void printHex8or4(uint32_t value)
 {
-    printHex1(word >> 12);
-    printHex1(word >> 8);
-    printHex1(word >> 4);
-    printHex1(word);
-}
-
-void printHex8(unsigned long word)
-{
-    unsigned int upper = (unsigned int)(word >> 16);
+    uint16_t upper = (uint16_t)(value >> 16);
     if (upper)
         printHex4(upper);
-    printHex4((unsigned int)word);
+    printHex4((uint16_t)value);
+}
+
+inline void printHex8or4Range(uint32_t first, uint32_t last)
+{
+    printHex8or4(first);
+    Serial.print('-');
+    printHex8or4(last);
 }
 
 void printProgString(PROGSTR str)
@@ -326,28 +347,17 @@ void cmdVersion(const char *args)
 void initDevice(const struct deviceInfo *dev)
 {
     // Update the global device details.
-    programEnd = PM32(dev->programSize) - 1;
-    configStart = PM32(dev->configStart);
-    configEnd = configStart + PM16(dev->configSize) - 1;
-    dataStart = PM32(dev->dataStart);
-    dataEnd = dataStart + PM16(dev->dataSize) - 1;
-    reservedStart = programEnd - PM16(dev->reservedWords) + 1;
-    reservedEnd = programEnd;
-    configSave = PM16(dev->configSave);
-    progFlashType = PM8(dev->progFlashType);
-    dataFlashType = PM8(dev->dataFlashType);
+    setGlobalParametersFromDevice(dev);
 
     // Print the extra device information.
     Serial.print("DeviceName: ");
     printProgString(PMPROGSTR(dev->name));
     Serial.println();
-    Serial.print("ProgramRange: 0000-");
-    printHex8(programEnd);
+    Serial.print("ProgramRange: ");
+    printHex8or4Range(0, programEnd);
     Serial.println();
     Serial.print("ConfigRange: ");
-    printHex8(configStart);
-    Serial.print('-');
-    printHex8(configEnd);
+    printHex8or4Range(configStart, configEnd);
     Serial.println();
     if (configSave != 0) {
         Serial.print("ConfigSave: ");
@@ -355,15 +365,11 @@ void initDevice(const struct deviceInfo *dev)
         Serial.println();
     }
     Serial.print("DataRange: ");
-    printHex8(dataStart);
-    Serial.print('-');
-    printHex8(dataEnd);
+    printHex8or4Range(dataStart, dataEnd);
     Serial.println();
     if (reservedStart <= reservedEnd) {
         Serial.print("ReservedRange: ");
-        printHex8(reservedStart);
-        Serial.print('-');
-        printHex8(reservedEnd);
+        printHex8or4Range(reservedStart, reservedEnd);
         Serial.println();
     }
 }
