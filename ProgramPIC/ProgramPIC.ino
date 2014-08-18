@@ -16,6 +16,16 @@
  */
 
 #include <avr/pgmspace.h>       // For PROGMEM
+#ifndef pgm_read_ptr
+#define pgm_read_ptr(address_short) (void*)pgm_read_word(address_short)
+#endif
+#define PM8(f) pgm_read_word(&(f))
+#define PM16(f) pgm_read_word(&(f))
+#define PM32(f) pgm_read_dword(&(f))
+#define PMPTR(f) pgm_read_ptr(&(f))
+#define PROGCHR const char PROGMEM
+#define PROGSTR PROGCHR*
+#define PMPROGSTR(f) (PROGSTR)PMPTR(f)
 
 // Pin mappings for the PIC programming shield.
 #define PIN_MCLR        A1      // 0: MCLR is VPP voltage, 1: Reset PIC
@@ -120,32 +130,33 @@ inline void resetGlobalParameters() {
     dataFlashType = DEFAULT_DATA_FLASH_TYPE;
 }
 
+
 // Device names, forced out into PROGMEM.
-const char s_pic12f629[]  PROGMEM = "pic12f629";
-const char s_pic12f675[]  PROGMEM = "pic12f675";
-const char s_pic16f630[]  PROGMEM = "pic16f630";
-const char s_pic16f676[]  PROGMEM = "pic16f676";
-const char s_pic16f84[]   PROGMEM = "pic16f84";
-const char s_pic16f84a[]  PROGMEM = "pic16f84a";
-const char s_pic16f87[]   PROGMEM = "pic16f87";
-const char s_pic16f88[]   PROGMEM = "pic16f88";
-const char s_pic16f627[]  PROGMEM = "pic16f627";
-const char s_pic16f627a[] PROGMEM = "pic16f627a";
-const char s_pic16f628[]  PROGMEM = "pic16f628";
-const char s_pic16f628a[] PROGMEM = "pic16f628a";
-const char s_pic16f648a[] PROGMEM = "pic16f648a";
-const char s_pic16f882[]  PROGMEM = "pic16f882";
-const char s_pic16f883[]  PROGMEM = "pic16f883";
-const char s_pic16f884[]  PROGMEM = "pic16f884";
-const char s_pic16f886[]  PROGMEM = "pic16f886";
-const char s_pic16f887[]  PROGMEM = "pic16f887";
+PROGCHR s_pic12f629[]  = "pic12f629";
+PROGCHR s_pic12f675[]  = "pic12f675";
+PROGCHR s_pic16f630[]  = "pic16f630";
+PROGCHR s_pic16f676[]  = "pic16f676";
+PROGCHR s_pic16f84[]   = "pic16f84";
+PROGCHR s_pic16f84a[]  = "pic16f84a";
+PROGCHR s_pic16f87[]   = "pic16f87";
+PROGCHR s_pic16f88[]   = "pic16f88";
+PROGCHR s_pic16f627[]  = "pic16f627";
+PROGCHR s_pic16f627a[] = "pic16f627a";
+PROGCHR s_pic16f628[]  = "pic16f628";
+PROGCHR s_pic16f628a[] = "pic16f628a";
+PROGCHR s_pic16f648a[] = "pic16f648a";
+PROGCHR s_pic16f882[]  = "pic16f882";
+PROGCHR s_pic16f883[]  = "pic16f883";
+PROGCHR s_pic16f884[]  = "pic16f884";
+PROGCHR s_pic16f886[]  = "pic16f886";
+PROGCHR s_pic16f887[]  = "pic16f887";
 
 // List of devices that are currently supported and their properties.
 // Note: most of these are based on published information and have not
 // been tested by the author.  Patches welcome to improve the list.
 struct deviceInfo
 {
-    const char PROGMEM *name;      // User-readable name of the device.
+    PROGSTR name;                  // User-readable name of the device.
     int16_t PROGMEM deviceId;      // Device ID for the PIC (-1 if no id).
     uint32_t PROGMEM programSize;  // Size of program memory (words).
     uint32_t PROGMEM configStart;  // Flat address start of configuration memory.
@@ -158,7 +169,7 @@ struct deviceInfo
     uint8_t PROGMEM dataFlashType; // Type of flash for data memory.
 
 };
-struct deviceInfo const devices[] PROGMEM = {
+struct deviceInfo const PROGMEM devices[] = {
     // http://ww1.microchip.com/downloads/en/DeviceDoc/41191D.pdf
     {s_pic12f629,  0x0F80, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
     {s_pic12f675,  0x0FC0, 1024, 0x2000, 0x2100, 8, 128, 1, 0x3000, FLASH4, EEPROM},
@@ -292,7 +303,7 @@ void printHex8(unsigned long word)
     printHex4((unsigned int)word);
 }
 
-void printProgString(const char PROGMEM *str)
+void printProgString(PROGSTR str)
 {
     for (;;) {
         char ch = (char)(pgm_read_byte(str));
@@ -309,25 +320,26 @@ void cmdVersion(const char *args)
     Serial.println("ProgramPIC 1.0");
 }
 
+
 // Initialize device properties from the "devices" list and
 // print them to the serial port.  Note: "dev" is in PROGMEM.
 void initDevice(const struct deviceInfo *dev)
 {
     // Update the global device details.
-    programEnd = pgm_read_dword(&(dev->programSize)) - 1;
-    configStart = pgm_read_dword(&(dev->configStart));
-    configEnd = configStart + pgm_read_word(&(dev->configSize)) - 1;
-    dataStart = pgm_read_dword(&(dev->dataStart));
-    dataEnd = dataStart + pgm_read_word(&(dev->dataSize)) - 1;
-    reservedStart = programEnd - pgm_read_word(&(dev->reservedWords)) + 1;
+    programEnd = PM32(dev->programSize) - 1;
+    configStart = PM32(dev->configStart);
+    configEnd = configStart + PM16(dev->configSize) - 1;
+    dataStart = PM32(dev->dataStart);
+    dataEnd = dataStart + PM16(dev->dataSize) - 1;
+    reservedStart = programEnd - PM16(dev->reservedWords) + 1;
     reservedEnd = programEnd;
-    configSave = pgm_read_word(&(dev->configSave));
-    progFlashType = pgm_read_byte(&(dev->progFlashType));
-    dataFlashType = pgm_read_byte(&(dev->dataFlashType));
+    configSave = PM16(dev->configSave);
+    progFlashType = PM8(dev->progFlashType);
+    dataFlashType = PM8(dev->dataFlashType);
 
     // Print the extra device information.
     Serial.print("DeviceName: ");
-    printProgString((const char PROGMEM *)(pgm_read_word(&(dev->name))));
+    printProgString(PMPROGSTR(dev->name));
     Serial.println();
     Serial.print("ProgramRange: 0000-");
     printHex8(programEnd);
@@ -414,13 +426,12 @@ void cmdDevice(const char *args)
     // Find the device in the built-in list if we have details for it.
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)
-            (pgm_read_word(&(devices[index].name)));
+        PROGSTR name = PMPROGSTR(devices[index].name);
         if (!name) {
             index = -1;
             break;
         }
-        int id = pgm_read_word(&(devices[index].deviceId));
+        int id = PM16(devices[index].deviceId);
         if (id == (deviceId & 0xFFE0))
             break;
         ++index;
@@ -449,8 +460,7 @@ void cmdDevices(const char *args)
     Serial.println("OK");
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)
-            (pgm_read_word(&(devices[index].name)));
+        PROGSTR name = PMPROGSTR(devices[index].name);
         if (!name)
             break;
         if (index > 0) {
@@ -461,7 +471,7 @@ void cmdDevices(const char *args)
                 Serial.print(' ');
         }
         printProgString(name);
-        int id = (int)(pgm_read_word(&(devices[index].deviceId)));
+        int id = PM16(devices[index].deviceId);
         if (id != -1)
             Serial.print('*');
         ++index;
@@ -485,8 +495,7 @@ void cmdSetDevice(const char *args)
     // Look for the name in the devices list.
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)
-            (pgm_read_word(&(devices[index].name)));
+        PROGSTR name = PMPROGSTR(devices[index].name);
         if (!name)
             break;
         if (matchString(name, args, len)) {
@@ -958,10 +967,10 @@ void cmdPowerOff(const char *args)
 typedef void (*commandFunc)(const char *args);
 typedef struct
 {
-    const char PROGMEM *name;
+    PROGSTR name;
     commandFunc func;
-    const char PROGMEM *desc;
-    const char PROGMEM *args;
+    PROGSTR desc;
+    PROGSTR args;
 } command_t;
 const char s_cmdRead[] PROGMEM = "READ";
 const char s_cmdReadDesc[] PROGMEM =
@@ -1021,14 +1030,11 @@ void cmdHelp(const char *args)
     Serial.println("OK");
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)
-            (pgm_read_word(&(commands[index].name)));
+        PROGSTR name = PMPROGSTR(commands[index].name);
         if (!name)
             break;
-        const char PROGMEM *desc = (const char PROGMEM *)
-            (pgm_read_word(&(commands[index].desc)));
-        const char PROGMEM *args = (const char PROGMEM *)
-            (pgm_read_word(&(commands[index].args)));
+        PROGSTR desc = PMPROGSTR(commands[index].desc);
+        PROGSTR args = PMPROGSTR(commands[index].args);
         printProgString(name);
         if (args) {
             Serial.print(' ');
@@ -1044,7 +1050,7 @@ void cmdHelp(const char *args)
 }
 
 // Match a data-space string where the name comes from PROGMEM.
-bool matchString(const char PROGMEM *name, const char *str, int len)
+bool matchString(PROGSTR name, const char *str, int len)
 {
     for (;;) {
         char ch1 = (char)(pgm_read_byte(name));
@@ -1090,13 +1096,11 @@ void processCommand(const char *buf)
     // Find the command and execute it.
     int index = 0;
     for (;;) {
-        const char PROGMEM *name = (const char PROGMEM *)
-            (pgm_read_word(&(commands[index].name)));
+        PROGSTR name = PMPROGSTR(commands[index].name);
         if (!name)
             break;
         if (matchString(name, cmd, len)) {
-            commandFunc func =
-                (commandFunc)(pgm_read_word(&(commands[index].func)));
+            commandFunc func = (commandFunc)(PMPTR(commands[index].func));
             (*func)(buf);
             return;
         }
