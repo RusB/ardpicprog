@@ -326,12 +326,31 @@ inline void printHex8or4Range(uint32_t first, uint32_t last)
 
 void printProgString(PROGSTR str)
 {
+    char buffer[16 + 1];
+    size_t index = 0;
+
+    // Last character in the buffer is '\0' because strncpy by design doesn't
+    // append it when the string is longer than the buffer.
+    buffer[sizeof(buffer) - 1] = '\0';
+
     for (;;) {
-        char ch = (char)(pgm_read_byte(str));
-        if (ch == '\0')
+        // Read &str[index], except with PROGMEM.
+        PROGSTR p = str + index;
+        // The buffer size is given as sizeof(buffer) - 1 to leave room for
+        // the trailing '\0'.
+        strncpy_P(buffer, p, sizeof(buffer) - 1);
+        Serial.print(buffer);
+
+        if (buffer[sizeof(buffer) - 2] == '\0') {
+            // If the string is shorter than the buffer, the result is padded
+            // on the right with '\0'.
             break;
-        Serial.print(ch);
-        ++str;
+        } else {
+            // If the string is longer than the buffer, there is no '\0' at
+            // the end of the result (besides the one we put there). We
+            // advance the index by the number of chars already copied.
+            index += sizeof(buffer) - 1;
+        }
     }
 }
 
