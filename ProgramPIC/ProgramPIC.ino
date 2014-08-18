@@ -86,16 +86,40 @@ unsigned long pc = 0;           // Current program counter.
 
 // Flat address ranges for the various memory spaces.  Defaults to the values
 // for the PIC16F628A.  "DEVICE" command updates to the correct values later.
-unsigned long programEnd    = 0x07FF;
-unsigned long configStart   = 0x2000;
-unsigned long configEnd     = 0x2007;
-unsigned long dataStart     = 0x2100;
-unsigned long dataEnd       = 0x217F;
-unsigned long reservedStart = 0x0800;
-unsigned long reservedEnd   = 0x07FF;
-unsigned int  configSave    = 0x0000;
-byte progFlashType          = FLASH4;
-byte dataFlashType          = EEPROM;
+#define DEFAULT_PROGRAM_END    	0x07FF
+#define DEFAULT_CONFIG_START   	0x2000
+#define DEFAULT_CONFIG_END     	0x2007
+#define DEFAULT_DATA_START     	0x2100
+#define DEFAULT_DATA_END       	0x217F
+#define DEFAULT_RESERVED_START 	0x0800
+#define DEFAULT_RESERVED_END   	0x07FF
+#define DEFAULT_CONFIG_SAVE   	0x0000
+#define DEFAULT_PROG_FLASH_TYPE	FLASH4
+#define DEFAULT_DATA_FLASH_TYPE	EEPROM
+
+unsigned long programEnd    = DEFAULT_PROGRAM_END;
+unsigned long configStart   = DEFAULT_CONFIG_START;
+unsigned long configEnd     = DEFAULT_CONFIG_END;
+unsigned long dataStart     = DEFAULT_DATA_START;
+unsigned long dataEnd       = DEFAULT_DATA_END;
+unsigned long reservedStart = DEFAULT_RESERVED_START;
+unsigned long reservedEnd   = DEFAULT_RESERVED_END;
+unsigned int  configSave    = DEFAULT_CONFIG_SAVE;
+byte progFlashType          = DEFAULT_PROG_FLASH_TYPE;
+byte dataFlashType          = DEFAULT_DATA_FLASH_TYPE;
+
+inline void resetGlobalParameters() {
+    programEnd    = DEFAULT_PROGRAM_END;
+    configStart   = DEFAULT_CONFIG_START;
+    configEnd     = DEFAULT_CONFIG_END;
+    dataStart     = DEFAULT_DATA_START;
+    dataEnd       = DEFAULT_DATA_END;
+    reservedStart = DEFAULT_RESERVED_START;
+    reservedEnd   = DEFAULT_RESERVED_END;
+    configSave    = DEFAULT_CONFIG_SAVE;
+    progFlashType = DEFAULT_PROG_FLASH_TYPE;
+    dataFlashType = DEFAULT_DATA_FLASH_TYPE;
+}
 
 // Device names, forced out into PROGMEM.
 const char s_pic12f629[]  PROGMEM = "pic12f629";
@@ -394,16 +418,7 @@ void cmdDevice(const char *args)
     } else {
         // Reset the global parameters to their defaults.  A separate
         // "SETDEVICE" command will be needed to set the correct values.
-        programEnd    = 0x07FF;
-        configStart   = 0x2000;
-        configEnd     = 0x2007;
-        dataStart     = 0x2100;
-        dataEnd       = 0x217F;
-        reservedStart = 0x0800;
-        reservedEnd   = 0x07FF;
-        configSave    = 0x0000;
-        progFlashType = FLASH4;
-        dataFlashType = EEPROM;
+        resetGlobalParameters();
     }
 
     Serial.print("ConfigWord: ");
