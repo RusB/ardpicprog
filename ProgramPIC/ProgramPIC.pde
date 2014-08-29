@@ -19,21 +19,24 @@
 #include <avr/pgmspace.h>       // For PROGMEM
 
 // Pin mappings for the PIC programming shield.
-#define PIN_MCLR        A1      // 0: MCLR is VPP voltage, 1: Reset PIC
-#define PIN_ACTIVITY    A5      // LED that indicates read/write activity
-#define PIN_VDD         2       // Controls the power to the PIC
+#define PIN_ACTIVITY    13      // LED that indicates read/write activity
+#define PIN_RAISE_VPP   A0      // Raises target VPP to programming voltage (~13V)
+#define PIN_LOWER_VPP   A1      // Lowers target VPP to reset voltage (0V)
+#define PIN_RAISE_VDD   11      // Raises target VDD to on voltage (~2.0 to 5.5V)
+#define PIN_LOWER_VDD   10      // Lowers target VDD to off voltage (~0V)
 #define PIN_CLOCK       4       // Clock pin
-#define PIN_DATA        7       // Data pin
+#define PIN_DATA        5       // Data pin
+#define PIN_AUX         2       // LVP pin
+#define PIN_CLOCK_DIR   7       // Direction of clock pin
+#define PIN_DATA_DIR    8       // Direction of data pin
+#define PIN_AUX_DIR     6       // Direction of lvp pin
 
-#define MCLR_RESET      HIGH    // PIN_MCLR state to reset the PIC
-#define MCLR_VPP        LOW     // PIN_MCLR state to apply 13v to MCLR/VPP pin
-#define VDD_OFF         LOW     // PIN_VDD state to lower target VDD
-#define VDD_ON          HIGH    // PIN_VDD state to raise target VDD
+#define EXT_DIR_INPUT   LOW     // PIN_*_DIR to receive input from level shifter
+#define EXT_DIR_OUTPUT  HIGH    // PIN_*_DIR to send output to level shifter
 
-#define LOWER_VPP() { digitalWrite(PIN_MCLR, MCLR_RESET); }
-#define RAISE_VPP() { digitalWrite(PIN_MCLR, MCLR_VPP); }
-#define LOWER_VDD() { digitalWrite(PIN_VDD, VDD_OFF); }
-#define RAISE_VDD() { digitalWrite(PIN_VDD, VDD_ON); }
+#define DELAY_PREVENT_SHOOT_THROUGH 50
+  // ms to wait between turning one side of power level shifter off and turning the other on
+
 
 // The default is true, but false is reportedly necessary for some devices, and
 // for some other devices if the CP bit is enabled. Meanwhile, a device with an
@@ -174,6 +177,56 @@ struct deviceInfo const devices[] PROGMEM = {
 char buffer[BUFFER_MAX];
 int buflen = 0;
 
+inline void setBidiShifterDirection(uint8_t mcuPin, uint8_t extDirPin, uint8_t mode) {
+  // The state we want to avoid is having the mcu pin set to output but the ext pin set to input.
+  if(mode == INPUT) {
+    pinMode(mcuPin, INPUT);
+    digitalWrite(extDirPin, EXT_DIR_INPUT);
+  } else {
+    digitalWrite(extDirPin, EXT_DIR_OUTPUT);
+    pinMode(mcuPin, OUTPUT);
+  }
+}
+
+inline void setClockDirection(uint8_t mode) {
+  setBidiShifterDirection(PIN_CLOCK, PIN_CLOCK_DIR, mode);
+}
+
+inline void setDataDirection(uint8_t mode) {
+  setBidiShifterDirection(PIN_DATA, PIN_DATA_DIR, mode);
+}
+
+inline void setAuxDirection(uint8_t mode) {
+  setBidiShifterDirection(PIN_AUX, PIN_AUX_DIR, mode);
+}
+
+inline void floatPowerShifter(uint8_t lowerPin, uint8_t raisePin) {
+  digitalWrite(lowerPin, false);
+  digitalWrite(raisePin, false);
+}
+
+inline void switchPowerShifter(uint8_t lowerPin, uint8_t raisePin, boolean newState) {
+  floatPowerShifter(lowerPin, raisePin);
+  delay(DELAY_PREVENT_SHOOT_THROUGH);
+  digitalWrite(newState ? raisePin : lowerPin, true);
+}
+
+inline void floatVpp() {
+  floatPowerShifter(PIN_LOWER_VPP, PIN_RAISE_VPP);
+}
+
+inline void switchVpp(boolean newState) {
+  switchPowerShifter(PIN_LOWER_VPP, PIN_RAISE_VPP, newState);
+}
+
+inline void floatVdd() {
+  floatPowerShifter(PIN_LOWER_VDD, PIN_RAISE_VDD);
+}
+
+inline void switchVdd(boolean newState) {
+  switchPowerShifter(PIN_LOWER_VDD, PIN_RAISE_VDD, newState);
+}
+
 unsigned long lastActive = 0;
 
 void setup()
@@ -182,14 +235,17 @@ void setup()
     Serial.begin(9600);
 
     // Hold the PIC in the powered down/reset state until we are ready for it.
-    pinMode(PIN_MCLR, OUTPUT);
-    pinMode(PIN_VDD, OUTPUT);
-    LOWER_VPP();
-    LOWER_VDD();
+    pinMode(PIN_LOWER_VPP, OUTPUT);
+    pinMode(PIN_RAISE_VPP, OUTPUT);
+    switchVpp(false);
+    
+    pinMode(PIN_LOWER_VDD, OUTPUT);
+    pinMode(PIN_RAISE_VDD, OUTPUT);
+    switchVdd(false);
 
     // Clock and data are floating until the first PIC command.
-    pinMode(PIN_CLOCK, INPUT);
-    pinMode(PIN_DATA, INPUT);
+    setClockDirection(INPUT);
+    setDataDirection(INPUT);
 
     // Turn off the activity LED initially.
     pinMode(PIN_ACTIVITY, OUTPUT);
@@ -1093,8 +1149,8 @@ void enterProgramMode()
 
     // Lower MCLR, VDD, DATA, and CLOCK initially.  This will put the
     // PIC into the powered-off, reset state just in case.
-    LOWER_VPP();
-    LOWER_VDD();
+    switchVpp(false);
+    switchVdd(false);
     digitalWrite(PIN_DATA, LOW);
     digitalWrite(PIN_CLOCK, LOW);
 
@@ -1102,21 +1158,21 @@ void enterProgramMode()
     delayMicroseconds(DELAY_SETTLE);
 
     // Switch DATA and CLOCK into outputs.
-    pinMode(PIN_DATA, OUTPUT);
-    pinMode(PIN_CLOCK, OUTPUT);
+    setDataDirection(OUTPUT);
+    setClockDirection(OUTPUT);
 
     if (VPP_BEFORE_VDD) {
       // Raise MCLR, then VDD.
-      RAISE_VPP();
+      switchVpp(true);
       delayMicroseconds(DELAY_TPPDP);
-      RAISE_VDD();
+      switchVdd(true);
       delayMicroseconds(DELAY_THLD0);
     }
     else {
       // Raise VDD, then MCLR.
-      RAISE_VDD();
+      switchVdd(true);
       delayMicroseconds(DELAY_THLD0);
-      RAISE_VPP();
+      switchVpp(true);
       delayMicroseconds(DELAY_TPPDP);
     }
     
@@ -1133,14 +1189,14 @@ void exitProgramMode()
         return;
 
     // Lower MCLR, VDD, DATA, and CLOCK.
-    LOWER_VPP();
-    LOWER_VDD();
+    switchVpp(false);
+    switchVdd(false);
     digitalWrite(PIN_DATA, LOW);
     digitalWrite(PIN_CLOCK, LOW);
 
     // Float the DATA and CLOCK pins.
-    pinMode(PIN_DATA, INPUT);
-    pinMode(PIN_CLOCK, INPUT);
+    setDataDirection(INPUT);
+    setClockDirection(INPUT);
 
     // Now in the idle state with the PIC powered off.
     state = STATE_IDLE;
@@ -1195,7 +1251,7 @@ unsigned int sendReadCommand(byte cmd)
     unsigned int data = 0;
     sendCommand(cmd);
     digitalWrite(PIN_DATA, LOW);
-    pinMode(PIN_DATA, INPUT);
+    setDataDirection(INPUT);
     delayMicroseconds(DELAY_TDLY2);
     for (byte bit = 0; bit < 16; ++bit) {
         data >>= 1;
@@ -1206,7 +1262,7 @@ unsigned int sendReadCommand(byte cmd)
         digitalWrite(PIN_CLOCK, LOW);
         delayMicroseconds(DELAY_THLD1);
     }
-    pinMode(PIN_DATA, OUTPUT);
+    setDataDirection(OUTPUT);
     delayMicroseconds(DELAY_TDLY2);
     return data;
 }
