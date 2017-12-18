@@ -31,9 +31,11 @@
 #define DELAY_SETTLE    50      // Delay for lines to settle for power off/on
 
 // States this application may be in.
-#define STATE_IDLE      0       // Idle, device is held in the reset state
-#define STATE_PROGRAM   1       // Active, reading and writing memory
-int state = STATE_IDLE;
+typedef enum _states {
+  STATE_IDLE,     // Idle, device is held in the reset state
+  STATE_PROGRAM   // Active, reading and writing memory
+} state_t;
+state_t state = STATE_IDLE;
 
 // Block select modes within the control byte.
 #define BSEL_NONE           0
@@ -41,7 +43,12 @@ int state = STATE_IDLE;
 #define BSEL_17BIT_ADDR     2
 #define BSEL_17BIT_ADDR_ALT 3
 
-const prog_char *eepromName;
+typedef const char * pic_cstr_t;
+typedef uint16_t pic_addr_t;
+typedef uint16_t pic_word_t;
+typedef uint8_t pic_data_t;
+
+pic_cstr_t eepromName;
 unsigned long eepromSize;
 unsigned long eepromEnd;
 byte eepromI2CAddress;
@@ -71,11 +78,11 @@ const char s_24lc1026[] PROGMEM = "24lc1026";
 // been tested by the author.  Patches welcome to improve the list.
 struct deviceInfo
 {
-  const prog_char *name;      // User-readable name of the device.
-  prog_uint32_t size;         // Size of program memory (bytes).
-  prog_uint16_t pageSize;     // Size of a page for bulk transfers.
-  prog_uint8_t address;       // Address on the I2C bus.
-  prog_uint8_t blockSelect;   // Block select mode.
+  pic_cstr_t name;        // User-readable name of the device.
+  uint32_t size;         // Size of program memory (bytes).
+  uint16_t pageSize;     // Size of a page for bulk transfers.
+  uint8_t address;       // Address on the I2C bus.
+  uint8_t blockSelect;   // Block select mode.
 
 };
 struct deviceInfo const devices[] PROGMEM = {
@@ -221,7 +228,7 @@ void printHex8(unsigned long word)
   printHex4((unsigned int)word);
 }
 
-void printProgString(const prog_char *str)
+void printProgString(pic_cstr_t str)
 {
   for (;;) {
     char ch = (char)(pgm_read_byte(str));
@@ -265,7 +272,7 @@ void printDeviceInfo()
 // Note: "dev" is in PROGMEM.
 void initDevice(const struct deviceInfo *dev)
 {
-  eepromName = (const prog_char *)pgm_read_word(&(dev->name));
+  eepromName = (pic_cstr_t)pgm_read_word(&(dev->name));
   eepromSize = pgm_read_dword(&(dev->size));
   eepromEnd = (eepromSize / 2) - 1;
   eepromI2CAddress = pgm_read_byte(&(dev->address));
@@ -301,7 +308,7 @@ void cmdDevices(const char *args)
   Serial.println("OK");
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(devices[index].name)));
     if (!name)
       break;
@@ -340,7 +347,7 @@ void cmdSetDevice(const char *args)
   // Look for the name in the devices list.
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(devices[index].name)));
     if (!name)
       break;
@@ -687,10 +694,10 @@ void cmdPowerOff(const char *args)
 typedef void (*commandFunc)(const char *args);
 typedef struct
 {
-  const prog_char *name;
+  pic_cstr_t name;
   commandFunc func;
-  const prog_char *desc;
-  const prog_char *args;
+  pic_cstr_t desc;
+  pic_cstr_t args;
 } command_t;
 const char s_cmdRead[] PROGMEM = "READ";
 const char s_cmdReadDesc[] PROGMEM =
@@ -750,13 +757,13 @@ void cmdHelp(const char *args)
   Serial.println("OK");
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].name)));
     if (!name)
       break;
-    const prog_char *desc = (const prog_char *)
+    pic_cstr_t desc = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].desc)));
-    const prog_char *args = (const prog_char *)
+    pic_cstr_t args = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].args)));
     printProgString(name);
     if (args) {
@@ -773,7 +780,7 @@ void cmdHelp(const char *args)
 }
 
 // Match a data-space string where the name comes from PROGMEM.
-bool matchString(const prog_char *name, const char *str, int len)
+bool matchString(pic_cstr_t name, pic_cstr_t str, int len)
 {
   for (;;) {
     char ch1 = (char)(pgm_read_byte(name));
@@ -822,7 +829,7 @@ void processCommand(const char *buf)
   // Find the command and execute it.
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].name)));
     if (!name)
       break;

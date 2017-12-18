@@ -29,39 +29,45 @@
 #define MCLR_VPP        LOW     // PIN_MCLR state to apply 13v to MCLR/VPP pin
 
 // All delays are in microseconds.
-#define DELAY_SETTLE    50      // Delay for lines to settle for reset
-#define DELAY_TPPDP     5       // Hold time after raising MCLR
-#define DELAY_THLD0     5       // Hold time after raising VDD
-#define DELAY_TSET1     1       // Data in setup time before lowering clock
-#define DELAY_THLD1     1       // Data in hold time after lowering clock
-#define DELAY_TDLY2     1       // Delay between commands or data
-#define DELAY_TDLY3     1       // Delay until data bit read will be valid
-#define DELAY_TPROG     4000    // Time for a program memory write to complete
-#define DELAY_TDPROG    6000    // Time for a data memory write to complete
-#define DELAY_TERA      6000    // Time for a word erase to complete
-#define DELAY_TPROG5    1000    // Time for program write on FLASH5 systems
-#define DELAY_TFULLERA  50000   // Time for a full chip erase
-#define DELAY_TFULL84   20000   // Intermediate wait for PIC16F84/PIC16F84A
+enum _delays {
+  DELAY_SETTLE    = 50,     // Delay for lines to settle for reset
+  DELAY_TPPDP     = 5,      // Hold time after raising MCLR
+  DELAY_THLD0     = 5,      // Hold time after raising VDD
+  DELAY_TSET1     = 1,      // Data in setup time before lowering clock
+  DELAY_THLD1     = 1,      // Data in hold time after lowering clock
+  DELAY_TDLY2     = 1,      // Delay between commands or data
+  DELAY_TDLY3     = 1,      // Delay until data bit read will be valid
+  DELAY_TPROG     = 4000,   // Time for a program memory write to complete
+  DELAY_TDPROG    = 6000,   // Time for a data memory write to complete
+  DELAY_TERA      = 6000,   // Time for a word erase to complete
+  DELAY_TPROG5    = 1000,   // Time for program write on FLASH5 systems
+  DELAY_TFULLERA  = 50000,  // Time for a full chip erase
+  DELAY_TFULL84   = 20000   // Intermediate wait for PIC16F84/PIC16F84A
+};
 
 // Commands that may be sent to the device.
-#define CMD_LOAD_CONFIG         0x00    // Load (write) to config memory
-#define CMD_LOAD_PROGRAM_MEMORY 0x02    // Load to program memory
-#define CMD_LOAD_DATA_MEMORY    0x03    // Load to data memory
-#define CMD_INCREMENT_ADDRESS   0x06    // Increment the PC
-#define CMD_READ_PROGRAM_MEMORY 0x04    // Read from program memory
-#define CMD_READ_DATA_MEMORY    0x05    // Read from data memory
-#define CMD_BEGIN_PROGRAM       0x08    // Begin programming with erase cycle
-#define CMD_BEGIN_PROGRAM_ONLY  0x18    // Begin programming only cycle
-#define CMD_END_PROGRAM_ONLY    0x17    // End programming only cycle
-#define CMD_BULK_ERASE_PROGRAM  0x09    // Bulk erase program memory
-#define CMD_BULK_ERASE_DATA     0x0B    // Bulk erase data memory
-#define CMD_CHIP_ERASE          0x1F    // Erase the entire chip
+enum _pic_commands {
+  CMD_LOAD_CONFIG         = 0x00,    // Load (write) to config memory
+  CMD_LOAD_PROGRAM_MEMORY = 0x02,    // Load to program memory
+  CMD_LOAD_DATA_MEMORY    = 0x03,    // Load to data memory
+  CMD_INCREMENT_ADDRESS   = 0x06,    // Increment the PC
+  CMD_READ_PROGRAM_MEMORY = 0x04,    // Read from program memory
+  CMD_READ_DATA_MEMORY    = 0x05,    // Read from data memory
+  CMD_BEGIN_PROGRAM       = 0x08,    // Begin programming with erase cycle
+  CMD_BEGIN_PROGRAM_ONLY  = 0x18,    // Begin programming only cycle
+  CMD_END_PROGRAM_ONLY    = 0x17,    // End programming only cycle
+  CMD_BULK_ERASE_PROGRAM  = 0x09,    // Bulk erase program memory
+  CMD_BULK_ERASE_DATA     = 0x0B,    // Bulk erase data memory
+  CMD_CHIP_ERASE          = 0x1F     // Erase the entire chip
+};
 
 // States this application may be in.
-#define STATE_IDLE      0       // Idle, device is held in the reset state
-#define STATE_PROGRAM   1       // Active, reading and writing program memory
-#define STATE_CONFIG    2       // Active, reading and writing config memory
-int state = STATE_IDLE;
+typedef enum _state {
+  STATE_IDLE,      // Idle, device is held in the reset state
+  STATE_PROGRAM,   // Active, reading and writing program memory
+  STATE_CONFIG     // Active, reading and writing config memory
+} state_t;
+state_t state = STATE_IDLE;
 
 // Flash types.  Uses a similar naming system to picprog.
 #define EEPROM          0
@@ -69,20 +75,26 @@ int state = STATE_IDLE;
 #define FLASH4          4
 #define FLASH5          5
 
-unsigned long pc = 0;           // Current program counter.
+typedef const char * pic_cstr_t;
+typedef uint16_t pic_addr_t;
+typedef uint16_t pic_word_t;
+typedef uint8_t pic_data_t;
+
+pic_addr_t pc = 0;           // Current program counter.
 
 // Flat address ranges for the various memory spaces.  Defaults to the values
 // for the PIC16F628A.  "DEVICE" command updates to the correct values later.
-unsigned long programEnd    = 0x07FF;
-unsigned long configStart   = 0x2000;
-unsigned long configEnd     = 0x2007;
-unsigned long dataStart     = 0x2100;
-unsigned long dataEnd       = 0x217F;
-unsigned long reservedStart = 0x0800;
-unsigned long reservedEnd   = 0x07FF;
-unsigned int  configSave    = 0x0000;
-byte progFlashType          = FLASH4;
-byte dataFlashType          = EEPROM;
+pic_addr_t programEnd    = 0x07FF;
+pic_addr_t configStart   = 0x2000;
+pic_addr_t configEnd     = 0x2007;
+pic_addr_t dataStart     = 0x2100;
+pic_addr_t dataEnd       = 0x217F;
+pic_addr_t reservedStart = 0x0800;
+pic_addr_t reservedEnd   = 0x07FF;
+
+pic_addr_t  configSave    = 0x0000;
+pic_data_t progFlashType  = FLASH4;
+pic_data_t dataFlashType  = EEPROM;
 
 // Device names, forced out into PROGMEM.
 const char s_pic12f629[]  PROGMEM = "pic12f629";
@@ -109,17 +121,17 @@ const char s_pic16f887[]  PROGMEM = "pic16f887";
 // been tested by the author.  Patches welcome to improve the list.
 struct deviceInfo
 {
-  const prog_char *name;      // User-readable name of the device.
-  prog_int16_t deviceId;      // Device ID for the PIC (-1 if no id).
-  prog_uint32_t programSize;  // Size of program memory (words).
-  prog_uint32_t configStart;  // Flat address start of configuration memory.
-  prog_uint32_t dataStart;    // Flat address start of EEPROM data memory.
-  prog_uint16_t configSize;   // Number of configuration words.
-  prog_uint16_t dataSize;     // Size of EEPROM data memory (bytes).
-  prog_uint16_t reservedWords;// Reserved program words (e.g. for OSCCAL).
-  prog_uint16_t configSave;   // Bits in config word to be saved.
-  prog_uint8_t progFlashType; // Type of flash for program memory.
-  prog_uint8_t dataFlashType; // Type of flash for data memory.
+  pic_cstr_t name;      // User-readable name of the device.
+  pic_word_t deviceId;      // Device ID for the PIC (-1 if no id).
+  pic_word_t programSize;  // Size of program memory (words).
+  pic_addr_t configStart;  // Flat address start of configuration memory.
+  pic_addr_t dataStart;    // Flat address start of EEPROM data memory.
+  pic_word_t configSize;   // Number of configuration words.
+  pic_word_t dataSize;     // Size of EEPROM data memory (bytes).
+  pic_word_t reservedWords;// Reserved program words (e.g. for OSCCAL).
+  pic_word_t configSave;   // Bits in config word to be saved.
+  pic_data_t progFlashType; // Type of flash for program memory.
+  pic_data_t dataFlashType; // Type of flash for data memory.
 
 };
 struct deviceInfo const devices[] PROGMEM = {
@@ -219,7 +231,7 @@ void loop()
   }
 }
 
-void printHex1(unsigned int value)
+void printHex1(int8_t value)
 {
   if (value >= 10)
     Serial.print((char)('A' + value - 10));
@@ -227,27 +239,27 @@ void printHex1(unsigned int value)
     Serial.print((char)('0' + value));
 }
 
-void printHex4(unsigned int word)
+void printHex4(int16_t word)
 {
-  printHex1((word >> 12) & 0x0F);
-  printHex1((word >> 8) & 0x0F);
-  printHex1((word >> 4) & 0x0F);
-  printHex1(word & 0x0F);
+  printHex1(0x0F & (word >> 12));
+  printHex1(0x0F & (word >> 8));
+  printHex1(0x0F & (word >> 4));
+  printHex1(0x0F & (word));
 }
 
-void printHex8(unsigned long word)
+void printHex8(int32_t word)
 {
-  unsigned int upper = (unsigned int)(word >> 16);
+  int16_t upper = (int16_t) (word >> 16);
   if (upper)
     printHex4(upper);
-  printHex4((unsigned int)word);
+  printHex4((int16_t) word);
 }
 
-void printProgString(const prog_char *str)
+void printProgString(pic_cstr_t str)
 {
   for (;;) {
     char ch = (char)(pgm_read_byte(str));
-    if (ch == '\0')
+    if ('\0' == ch)
       break;
     Serial.print(ch);
     ++str;
@@ -255,7 +267,7 @@ void printProgString(const prog_char *str)
 }
 
 // PROGRAM_PIC_VERSION command.
-void cmdVersion(const char *args)
+void cmdVersion(pic_cstr_t args)
 {
   Serial.println("ProgramPIC 1.0");
 }
@@ -278,26 +290,31 @@ void initDevice(const struct deviceInfo *dev)
 
   // Print the extra device information.
   Serial.print("DeviceName: ");
-  printProgString((const prog_char *)(pgm_read_word(&(dev->name))));
+  printProgString((pic_cstr_t)(pgm_read_word(&(dev->name))));
   Serial.println();
+
   Serial.print("ProgramRange: 0000-");
   printHex8(programEnd);
   Serial.println();
+
   Serial.print("ConfigRange: ");
   printHex8(configStart);
   Serial.print('-');
   printHex8(configEnd);
   Serial.println();
+
   if (configSave != 0) {
     Serial.print("ConfigSave: ");
     printHex4(configSave);
     Serial.println();
   }
+
   Serial.print("DataRange: ");
   printHex8(dataStart);
   Serial.print('-');
   printHex8(dataEnd);
   Serial.println();
+
   if (reservedStart <= reservedEnd) {
     Serial.print("ReservedRange: ");
     printHex8(reservedStart);
@@ -365,17 +382,18 @@ void cmdDevice(const char *args)
   // Find the device in the built-in list if we have details for it.
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(devices[index].name)));
     if (!name) {
       index = -1;
       break;
     }
-    int id = pgm_read_word(&(devices[index].deviceId));
+    pic_word_t id = pgm_read_word(&(devices[index].deviceId));
     if (id == (deviceId & 0xFFE0))
       break;
     ++index;
   }
+
   if (index >= 0) {
     initDevice(&(devices[index]));
   } else {
@@ -409,7 +427,7 @@ void cmdDevices(const char *args)
   Serial.println("OK");
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(devices[index].name)));
     if (!name)
       break;
@@ -445,7 +463,7 @@ void cmdSetDevice(const char *args)
   // Look for the name in the devices list.
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(devices[index].name)));
     if (!name)
       break;
@@ -919,11 +937,12 @@ void cmdPowerOff(const char *args)
 typedef void (*commandFunc)(const char *args);
 typedef struct
 {
-  const prog_char *name;
+  pic_cstr_t name;
   commandFunc func;
-  const prog_char *desc;
-  const prog_char *args;
+  pic_cstr_t desc;
+  pic_cstr_t args;
 } command_t;
+
 const char s_cmdRead[] PROGMEM = "READ";
 const char s_cmdReadDesc[] PROGMEM =
   "Reads program and data words from device memory (text)";
@@ -982,13 +1001,13 @@ void cmdHelp(const char *args)
   Serial.println("OK");
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].name)));
     if (!name)
       break;
-    const prog_char *desc = (const prog_char *)
+    pic_cstr_t desc = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].desc)));
-    const prog_char *args = (const prog_char *)
+    pic_cstr_t args = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].args)));
     printProgString(name);
     if (args) {
@@ -1005,7 +1024,7 @@ void cmdHelp(const char *args)
 }
 
 // Match a data-space string where the name comes from PROGMEM.
-bool matchString(const prog_char *name, const char *str, int len)
+bool matchString(pic_cstr_t name, pic_cstr_t str, int len)
 {
   for (;;) {
     char ch1 = (char)(pgm_read_byte(name));
@@ -1054,7 +1073,7 @@ void processCommand(const char *buf)
   // Find the command and execute it.
   int index = 0;
   for (;;) {
-    const prog_char *name = (const prog_char *)
+    pic_cstr_t name = (pic_cstr_t)
                             (pgm_read_word(&(commands[index].name)));
     if (!name)
       break;
@@ -1190,7 +1209,7 @@ unsigned int sendReadCommand(byte cmd)
 }
 
 // Set the program counter to a specific "flat" address.
-void setPC(unsigned long addr)
+void setPC(pic_addr_t addr)
 {
   if (addr >= dataStart && addr <= dataEnd) {
     // Data memory.
@@ -1251,7 +1270,7 @@ void setErasePC()
 
 // Read a word from memory (program, config, or data depending upon addr).
 // The start and stop bits will be stripped from the raw value from the PIC.
-unsigned int readWord(unsigned long addr)
+unsigned int readWord(pic_addr_t addr)
 {
   setPC(addr);
   if (addr >= dataStart && addr <= dataEnd)
@@ -1263,7 +1282,7 @@ unsigned int readWord(unsigned long addr)
 // Read a word from config memory using relative, non-flat, addressing.
 // Used by the "DEVICE" command to fetch information about devices whose
 // flat address ranges are presently unknown.
-unsigned int readConfigWord(unsigned long addr)
+unsigned int readConfigWord(pic_addr_t addr)
 {
   if (state == STATE_IDLE) {
     // Enter programming mode and switch to config memory.
@@ -1290,7 +1309,7 @@ unsigned int readConfigWord(unsigned long addr)
 }
 
 // Begin a programming cycle, depending upon the type of flash being written.
-void beginProgramCycle(unsigned long addr, bool isData)
+void beginProgramCycle(pic_addr_t addr, bool isData)
 {
   switch (isData ? dataFlashType : progFlashType) {
     case FLASH:
@@ -1312,7 +1331,7 @@ void beginProgramCycle(unsigned long addr, bool isData)
 
 // Write a word to memory (program, config, or data depending upon addr).
 // Returns true if the write succeeded, false if read-back failed to match.
-bool writeWord(unsigned long addr, unsigned int word)
+bool writeWord(pic_addr_t addr, unsigned int word)
 {
   unsigned int readBack;
   setPC(addr);
@@ -1343,7 +1362,7 @@ bool writeWord(unsigned long addr, unsigned int word)
 }
 
 // Force a word to be written even if it normally would protect config bits.
-bool writeWordForced(unsigned long addr, unsigned int word)
+bool writeWordForced(pic_addr_t addr, unsigned int word)
 {
   unsigned int readBack;
   setPC(addr);
