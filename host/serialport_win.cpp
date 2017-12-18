@@ -17,6 +17,8 @@
 
 #include "serialport.h"
 
+#ifdef SERIAL_WIN32
+
 void SerialPort::init()
 {
     handle = INVALID_HANDLE_VALUE;
@@ -150,3 +152,5 @@ void SerialPort::write(const char *data, size_t len)
         ::ClearCommError(handle, &errors, &status);
     }
 }
+
+#endif
